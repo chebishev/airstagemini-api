@@ -72,43 +72,52 @@ def read_root():
 
 
 @app.get("/device_info")
-async def get_device_info(request: Request):
+@app.get("/device/status")
+async def get_device_status(request: Request):
     device = request.app.state.device
 
     await device.refresh_parameters()
 
-    needed_parameters = ("iu_onoff", "iu_set_tmp", "iu_op_mode", "iu_fan_spd")
-
-    device_parameters = {
-        parameter: device._lastGoodValue[parameter]
-        for parameter in needed_parameters
-        if parameter in device._lastGoodValue
+    return {
+        "status": "success",
+        "data": {
+            "power": device.get_device_on_off_state(),
+            "temperature": device.get_target_temperature(),
+            "operating_mode": device.get_operating_mode(),
+            "fan_speed": device.get_fan_speed(),
+        }
     }
-
-    return device_parameters
 
 
 @app.get("/device/temperature")
 async def get_temperature(request: Request):
     device = request.app.state.device
+    await device.refresh_parameters()
     return device.get_target_temperature()
 
 
 @app.get("/device/operating_mode")
 async def get_operating_mode(request: Request):
     device = request.app.state.device
-    return device.get_operating_mode()
+    await device.refresh_parameters()
+    result = device.get_operating_mode()
+
+    print("OPERATING MODE:", repr(result), type(result))
+
+    return result.value if result is not None else None
 
 
 @app.get("/device/fan_speed")
 async def get_fan_speed(request: Request):
     device = request.app.state.device
+    await device.refresh_parameters()
     return device.get_fan_speed()
 
 
 @app.post("/device/switch_on")
 async def switch_on_device(request: Request):
     device = request.app.state.device
+    await device.refresh_parameters()
 
     device_status = device.get_device_on_off_state()
 
@@ -126,6 +135,7 @@ async def switch_on_device(request: Request):
 @app.post("/device/switch_off")
 async def switch_off_device(request: Request):
     device = request.app.state.device
+    await device.refresh_parameters()
 
     device_status = device.get_device_on_off_state()
 

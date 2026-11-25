@@ -1,0 +1,7 @@
+fastapi
+uvicorn
+mijiaAPI
+python-dotenv
+aiohttp
+cachetools
+email-validator

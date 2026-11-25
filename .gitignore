@@ -1,0 +1,5 @@
+/.env
+/test_fujitsu.py
+/token.json
+/venv
+/__pycache__

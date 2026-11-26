@@ -7,13 +7,22 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, Request
 
 from airstageApi import ApiCloud
-from airstageAC import AirstageAC, FanSpeed
+from airstageAC import AirstageAC, OperationMode, FanSpeed
+
+from pydantic import BaseModel
 
 load_dotenv()
 
 USERNAME = os.environ.get("AIRSTAGE_USERNAME")
 PASSWORD = os.environ.get("AIRSTAGE_PASSWORD")
 COUNTRY = os.environ.get("AIRSTAGE_COUNTRY")
+
+
+class DeviceSettings(BaseModel):
+    mode: str
+    fan: str
+    temperature: float
+    power: bool
 
 
 @asynccontextmanager
@@ -79,12 +88,16 @@ app = FastAPI(
 )
 
 
+@app.get("/favicon.ico", include_in_schema=False)
+def favicon():
+    return FileResponse("favicon.ico")
+
+
 @app.get("/")
 def read_root():
     return {"message": "Airstage Mini API up and running"}
 
 
-@app.get("/device_info")
 @app.get("/device/status")
 async def get_device_status(request: Request):
     device = request.app.state.device
@@ -102,62 +115,47 @@ async def get_device_status(request: Request):
     }
 
 
-@app.get("/device/temperature")
-async def get_temperature(request: Request):
-    device = request.app.state.device
-    await device.refresh_parameters()
-    return device.get_target_temperature()
-
-
-@app.get("/device/operating_mode")
-async def get_operating_mode(request: Request):
-    device = request.app.state.device
-    await device.refresh_parameters()
-    result = device.get_operating_mode()
-
-    print("OPERATING MODE:", repr(result), type(result))
-
-    return result.value if result is not None else None
-
-
-@app.get("/device/fan_speed")
-async def get_fan_speed(request: Request):
-    device = request.app.state.device
-    await device.refresh_parameters()
-    return device.get_fan_speed()
-
-
-@app.post("/device/switch_on")
-async def switch_on_device(request: Request):
+@app.post("/device/settings")
+async def set_device_settings(data: DeviceSettings, request: Request):
     device = request.app.state.device
     await device.refresh_parameters()
 
+    results = {}
+
+    # POWER
     device_status = device.get_device_on_off_state()
 
     if device_status is None:
         return {"status": "error", "message": "Cannot read device status"}
 
-    if device_status:
-        return {"status": "already_on"}
+    if data.power != device_status:
+        if data.power:
+            await device.turn_on()
+            results["power"] = "ON"
+        else:
+            await device.turn_off()
+            results["power"] = "OFF"
 
-    await device.turn_on()
+    # Останалите настройки се променят само ако климатикът трябва да работи
+    if data.power:
 
-    return {"status": "success", "action": "switch_on"}
+        current_mode = device.get_operating_mode()
+        if current_mode != OperationMode[data.mode]:
+            await device.set_operation_mode(OperationMode[data.mode])
+            results["mode"] = data.mode
 
+        current_fan = device.get_fan_speed()
+        if current_fan != FanSpeed[data.fan]:
+            await device.set_fan_speed(FanSpeed[data.fan])
+            results["fan"] = data.fan
 
-@app.post("/device/switch_off")
-async def switch_off_device(request: Request):
-    device = request.app.state.device
-    await device.refresh_parameters()
+        current_temp = device.get_target_temperature()
+        if current_temp != data.temperature:
+            await device.set_target_temperature(data.temperature)
+            results["temperature"] = data.temperature
 
-    device_status = device.get_device_on_off_state()
-
-    if device_status is None:
-        return {"status": "error", "message": "Cannot read device status"}
-
-    if not device_status:
-        return {"status": "already_off"}
-
-    await device.turn_off()
-
-    return {"status": "success", "action": "switch_off"}
+    return {
+        "status": "success",
+        "updated": results
+    }
+    

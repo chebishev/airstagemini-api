@@ -18,7 +18,14 @@ COUNTRY = os.environ.get("AIRSTAGE_COUNTRY")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    async with ClientSession() as session:
+    app.state.api = None
+    app.state.device = None
+
+    session = ClientSession()
+    app.state.session = session
+
+    try:
+        print("AIRSTAGE: connecting...")
 
         api = ApiCloud(
             username=USERNAME,
@@ -28,25 +35,31 @@ async def lifespan(app: FastAPI):
             session=session,
         )
 
+        print("AIRSTAGE: requesting devices...")
         devices = await api.get_devices()
 
-        if not devices:
-            raise RuntimeError("No AIRSTAGE devices found")
+        if devices:
+            dsn = next(iter(devices))
 
-        dsn = next(iter(devices))
+            print("AIRSTAGE: refreshing parameters...")
+            device = AirstageAC(dsn, api)
+            await device.refresh_parameters()
 
-        device = AirstageAC(dsn, api)
-        await device.refresh_parameters()
+            app.state.api = api
+            app.state.device = device
 
-        # Запазваме обектите за всички endpoints
-        app.state.api = api
-        app.state.device = device
+            print("AIRSTAGE initialized:", dsn)
+        else:
+            print("AIRSTAGE: no devices found")
 
-        print("AIRSTAGE initialized:", dsn)
+    except Exception:
+        import traceback
+        traceback.print_exc()
 
-        yield
+    yield
 
-        print("AIRSTAGE API shutting down")
+    await session.close()
+    print("AIRSTAGE API shutting down")
 
 
 app = FastAPI(

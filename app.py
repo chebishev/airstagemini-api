@@ -101,6 +101,7 @@ app = FastAPI(
         "name": "MIT License",
         "identifier": "MIT",
     },
+    root_path="/airstagemini"
 )
 
 

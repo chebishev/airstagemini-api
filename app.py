@@ -122,8 +122,8 @@ async def set_device_settings(data: DeviceSettings, request: Request):
 
     results = {}
 
-    # POWER
-    device_status = device.get_device_on_off_state()
+    # Check if the device is already powered on/off before change its state
+    device_status = device.get_device_on_off_state()  # true/false
 
     if device_status is None:
         return {"status": "error", "message": "Cannot read device status"}
@@ -136,7 +136,7 @@ async def set_device_settings(data: DeviceSettings, request: Request):
             await device.turn_off()
             results["power"] = "OFF"
 
-    # Останалите настройки се променят само ако климатикът трябва да работи
+    # update only changed parameters by the user
     if data.power:
 
         current_mode = device.get_operating_mode()
@@ -158,4 +158,3 @@ async def set_device_settings(data: DeviceSettings, request: Request):
         "status": "success",
         "updated": results
     }
-    

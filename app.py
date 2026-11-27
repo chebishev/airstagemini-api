@@ -1,10 +1,11 @@
 import asyncio
 import os
+import secrets
 
 from contextlib import asynccontextmanager
 from aiohttp import ClientSession
 from dotenv import load_dotenv
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, APIRouter, Depends, Header
 
 from airstageApi import ApiCloud
 from airstageAC import AirstageAC, OperationMode, FanSpeed
@@ -12,11 +13,21 @@ from airstageAC import AirstageAC, OperationMode, FanSpeed
 from pydantic import BaseModel
 
 load_dotenv()
-
+API_KEY = os.environ.get("AIRSTAGEMINI_API_KEY")
 USERNAME = os.environ.get("AIRSTAGE_USERNAME")
 PASSWORD = os.environ.get("AIRSTAGE_PASSWORD")
 COUNTRY = os.environ.get("AIRSTAGE_COUNTRY")
 
+if not API_KEY:
+    raise RuntimeError("AIRSTAGEMINI_API_KEY environment variable is not set")
+
+
+def verify_api_key(x_api_key: str = Header()):
+    if not secrets.compare_digest(x_api_key, API_KEY):
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid or missing API key",
+        )
 
 class DeviceSettings(BaseModel):
     mode: str
@@ -70,6 +81,11 @@ async def lifespan(app: FastAPI):
     await session.close()
     print("AIRSTAGE API shutting down")
 
+public_router = APIRouter()
+
+api_router = APIRouter(
+    dependencies=[Depends(verify_api_key)]
+)
 
 app = FastAPI(
     title="Airstage Mini API",
@@ -93,12 +109,12 @@ def favicon():
     return FileResponse("favicon.ico")
 
 
-@app.get("/")
+@public_router.get("/")
 def read_root():
     return {"message": "Airstage Mini API up and running"}
 
 
-@app.get("/device/status")
+@api_router.get("/device/status")
 async def get_device_status(request: Request):
     device = request.app.state.device
 
@@ -115,7 +131,7 @@ async def get_device_status(request: Request):
     }
 
 
-@app.post("/device/settings")
+@api_router.post("/device/settings")
 async def set_device_settings(data: DeviceSettings, request: Request):
     device = request.app.state.device
     await device.refresh_parameters()
@@ -158,3 +174,6 @@ async def set_device_settings(data: DeviceSettings, request: Request):
         "status": "success",
         "updated": results
     }
+
+app.include_router(public_router)
+app.include_router(api_router)

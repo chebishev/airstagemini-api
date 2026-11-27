@@ -1,3 +1,5 @@
-Minimal FastAPI backend for Airstage AC devices
+# AIRSTAGE Mini API
 
-Inspired from https://github.com/danielkaldheim/pyairstage
+A minimal FastAPI backend for controlling Fujitsu AIRSTAGE air conditioners.
+
+Inspired by [pyairstage](https://github.com/danielkaldheim/pyairstage).
